@@ -1,0 +1,7 @@
+{
+  "name": "NovaCart - Autonomous Smart Cart & Loss Prevention Retail OS",
+  "description": "Production-ready enterprise autonomous smart cart platform with real-time computer vision item scanning, weight verification, loss prevention telemetry, interactive indoor routing, and Gemini AI shopping assistance.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
