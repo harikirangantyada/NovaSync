@@ -23,6 +23,7 @@ import { ReceiptModal } from './components/ReceiptModal';
 import { AccessibilityModal } from './components/AccessibilityModal';
 import { KeyboardShortcutsModal } from './components/KeyboardShortcutsModal';
 import { ScreenReaderAnnouncer } from './components/ScreenReaderAnnouncer';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 export default function App() {
   // Navigation & Role State
@@ -377,49 +378,51 @@ export default function App() {
         onOpenShortcuts={() => setIsShortcutsOpen(true)}
       />
 
-      {/* Main View Router */}
-      <main className="flex-1 pb-16">
-        {activeTab === 'cart' && (
-          <ShopperCartView
-            cartState={cartState}
-            onOpenScanner={() => setIsScannerOpen(true)}
-            onIncrementItem={handleIncrementItem}
-            onDecrementItem={handleDecrementItem}
-            onRemoveItem={handleRemoveItem}
-            onInjectWeightDelta={handleInjectWeightDelta}
-            onTareScale={handleTareScale}
-            onCheckout={() => setIsCheckoutOpen(true)}
-            onOpenCopilot={() => setActiveTab('copilot')}
-            onOpenMap={() => setActiveTab('map')}
-          />
-        )}
+      {/* Main View Router with ErrorBoundary */}
+      <ErrorBoundary>
+        <main className="flex-1 pb-16">
+          {activeTab === 'cart' && (
+            <ShopperCartView
+              cartState={cartState}
+              onOpenScanner={() => setIsScannerOpen(true)}
+              onIncrementItem={handleIncrementItem}
+              onDecrementItem={handleDecrementItem}
+              onRemoveItem={handleRemoveItem}
+              onInjectWeightDelta={handleInjectWeightDelta}
+              onTareScale={handleTareScale}
+              onCheckout={() => setIsCheckoutOpen(true)}
+              onOpenCopilot={() => setActiveTab('copilot')}
+              onOpenMap={() => setActiveTab('map')}
+            />
+          )}
 
-        {activeTab === 'map' && (
-          <StoreMapView
-            cartProducts={cartState.items.map(i => i.product)}
-            onAddProductToCart={handleScanProduct}
-          />
-        )}
+          {activeTab === 'map' && (
+            <StoreMapView
+              cartProducts={cartState.items.map(i => i.product)}
+              onAddProductToCart={handleScanProduct}
+            />
+          )}
 
-        {activeTab === 'copilot' && (
-          <GeminiCopilotView
-            cartState={cartState}
-            onAddProducts={handleAddMultipleProducts}
-            onNavigateToCart={() => setActiveTab('cart')}
-          />
-        )}
+          {activeTab === 'copilot' && (
+            <GeminiCopilotView
+              cartState={cartState}
+              onAddProducts={handleAddMultipleProducts}
+              onNavigateToCart={() => setActiveTab('cart')}
+            />
+          )}
 
-        {activeTab === 'soc' && (
-          <LossPreventionSOCView
-            isCart101Locked={cartState.status === 'locked'}
-            onToggleCart101Lock={handleToggleCart101Lock}
-          />
-        )}
+          {activeTab === 'soc' && (
+            <LossPreventionSOCView
+              isCart101Locked={cartState.status === 'locked'}
+              onToggleCart101Lock={handleToggleCart101Lock}
+            />
+          )}
 
-        {activeTab === 'assessment' && (
-          <AssessmentSuiteView />
-        )}
-      </main>
+          {activeTab === 'assessment' && (
+            <AssessmentSuiteView />
+          )}
+        </main>
+      </ErrorBoundary>
 
       {/* Persistent Bottom Status Bar */}
       <footer className="fixed bottom-0 inset-x-0 bg-slate-900/95 backdrop-blur border-t border-slate-800 text-[11px] text-slate-400 py-1.5 px-4 z-30 flex items-center justify-between">

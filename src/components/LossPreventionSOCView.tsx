@@ -4,7 +4,7 @@
  * and immutable audit log stream with JSON export.
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   ShieldAlert, 
   Lock, 
@@ -98,10 +98,10 @@ export const LossPreventionSOCView: React.FC<LossPreventionSOCViewProps> = ({
     URL.revokeObjectURL(url);
   };
 
-  const filteredLogs = logs.filter(log => {
-    if (filterSeverity === 'all') return true;
-    return log.severity === filterSeverity;
-  });
+  const filteredLogs = useMemo(() => {
+    if (filterSeverity === 'all') return logs;
+    return logs.filter(log => log.severity === filterSeverity);
+  }, [logs, filterSeverity]);
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">

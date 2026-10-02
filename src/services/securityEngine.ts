@@ -2,16 +2,20 @@
  * NovaCart Security Engine & Cryptographic Integrity Subsystem
  * Production-ready security controls:
  * - Cart Tamper-evident Hashing (SHA-256 HMAC-like state checksums)
- * - PBKDF2 Password Hashing with Salt
- * - Role-Based Access Control (RBAC) verification
- * - XSS & Input Sanitization
- * - Rate Limiter for sensitive checkout/scanner calls
+ * - Timing-safe comparison to prevent timing side-channel attacks
+ * - PBKDF2 Password Hashing with Cryptographically Generated Salt
+ * - Role-Based Access Control (RBAC) verification with least privilege
+ * - XSS & Input Sanitization stripping inline events and javascript protocols
+ * - Rate Limiter with automatic sliding window purge
  * - Injection Prevention Pattern Detectors
+ * - Cryptographic Session Token Signer with TTL Expiration
  */
 
 import { CartItem, UserRole } from '../types';
 
-// Simple fast SHA-256 browser/node compatible implementation
+/**
+ * Standard SHA-256 hex digest generator
+ */
 export async function sha256Hex(message: string): Promise<string> {
   const encoder = new TextEncoder();
   const data = encoder.encode(message);
@@ -32,6 +36,26 @@ export async function sha256Hex(message: string): Promise<string> {
 }
 
 /**
+ * Timing-safe string comparison to eliminate timing side-channel attacks
+ * Constant time execution regardless of where character mismatches occur
+ */
+export function timingSafeEqual(a: string, b: string): boolean {
+  if (typeof a !== 'string' || typeof b !== 'string') return false;
+  const lenA = a.length;
+  const lenB = b.length;
+  let result = lenA ^ lenB;
+  const maxLen = Math.max(lenA, lenB);
+  
+  for (let i = 0; i < maxLen; i++) {
+    const charA = i < lenA ? a.charCodeAt(i) : 0;
+    const charB = i < lenB ? b.charCodeAt(i) : 0;
+    result |= charA ^ charB;
+  }
+  
+  return result === 0;
+}
+
+/**
  * Generates an immutable, tamper-evident cryptographic checksum of the cart.
  * If anyone attempts to mutate price, quantity, or weight in local storage or memory,
  * the checksum verification immediately fails and triggers a security lock.
@@ -47,12 +71,12 @@ export async function calculateCartChecksum(
     .sort()
     .join('|');
   
-  const rawPayload = `CART::${cartId}::USER::${shopperId}::TOT::${total.toFixed(2)}::ITEMS::${normalizedItems}::SALT::nc_sec_2026`;
+  const rawPayload = `CART::${cartId}::USER::${shopperId}::TOT::${total.toFixed(2)}::ITEMS::${normalizedItems}::SALT::nc_sec_2026_enterprise_v2`;
   return await sha256Hex(rawPayload);
 }
 
 /**
- * Verifies if the active cart matches its cryptographic signature.
+ * Verifies if the active cart matches its cryptographic signature using timing-safe comparison.
  */
 export async function verifyCartIntegrity(
   cartId: string,
@@ -61,11 +85,61 @@ export async function verifyCartIntegrity(
   total: number,
   expectedChecksum: string
 ): Promise<{ isValid: boolean; computedHash: string }> {
+  // Disallow negative or fraudulent totals immediately
+  if (total < 0 || isNaN(total)) {
+    return { isValid: false, computedHash: 'INVALID_NUMERIC_TOTAL' };
+  }
+
   const computedHash = await calculateCartChecksum(cartId, shopperId, items, total);
+  const isValid = timingSafeEqual(computedHash, expectedChecksum);
+
   return {
-    isValid: computedHash === expectedChecksum,
+    isValid,
     computedHash
   };
+}
+
+/**
+ * Generates a signed session bearer token with TTL timestamp
+ */
+export async function generateSessionToken(
+  userId: string,
+  role: UserRole,
+  ttlMs: number = 3600000
+): Promise<{ token: string; expiresAt: number }> {
+  const expiresAt = Date.now() + ttlMs;
+  const payload = `UID:${userId}:ROLE:${role}:EXP:${expiresAt}`;
+  const signature = await sha256Hex(`${payload}::SECRET_KEY_STORE_2026`);
+  const token = btoa(JSON.stringify({ payload, signature }));
+  return { token, expiresAt };
+}
+
+/**
+ * Validates session bearer token and verifies expiration
+ */
+export async function validateSessionToken(
+  token: string
+): Promise<{ valid: boolean; userId?: string; role?: UserRole; expired?: boolean }> {
+  try {
+    const decoded = JSON.parse(atob(token));
+    const expectedSig = await sha256Hex(`${decoded.payload}::SECRET_KEY_STORE_2026`);
+    if (!timingSafeEqual(decoded.signature, expectedSig)) {
+      return { valid: false };
+    }
+
+    const parts = decoded.payload.split(':');
+    const userId = parts[1];
+    const role = parts[3] as UserRole;
+    const expiresAt = Number(parts[5]);
+
+    if (Date.now() > expiresAt) {
+      return { valid: false, expired: true };
+    }
+
+    return { valid: true, userId, role };
+  } catch {
+    return { valid: false };
+  }
 }
 
 /**
@@ -77,12 +151,14 @@ export async function hashPasswordWithSalt(password: string, salt: string): Prom
 
 /**
  * Strict Input Sanitization to eliminate Cross-Site Scripting (XSS).
+ * Strips script tags, inline event attributes (onerror, onload, onclick), and javascript protocols.
  */
 export function sanitizeInput(input: string): string {
   if (!input) return '';
   return input
     .replace(/on\w+\s*=/gi, '')
     .replace(/javascript\s*:/gi, '')
+    .replace(/data\s*:\s*text\/html/gi, '')
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
@@ -100,8 +176,8 @@ export function detectInjectionRisk(input: string): boolean {
   const injectionPatterns = [
     /(\b(SELECT|INSERT|UPDATE|DELETE|DROP|UNION|ALTER|EXEC|OR|AND)\b.*\=)/i,
     /(\-\-|\#|\/\*|\*\/)/,
-    /(\$where|\$gt|\$ne|\$regex)/i,
-    /(<script|javascript:|onerror=|onload=)/i
+    /(\$where|\$gt|\$ne|\$regex|\$in)/i,
+    /(<script|javascript:|onerror=|onload=|eval\(|document\.cookie)/i
   ];
   return injectionPatterns.some(pattern => pattern.test(input));
 }
@@ -150,7 +226,7 @@ export function hasPermission(role: UserRole, permission: string): boolean {
 }
 
 /**
- * In-memory client/server rate limiter for sensitive operations (e.g. checkout, PIN scan).
+ * In-memory sliding window rate limiter with auto-purge
  */
 class RateLimiter {
   private requests: Map<string, number[]> = new Map();
@@ -165,7 +241,24 @@ class RateLimiter {
     
     timestamps.push(now);
     this.requests.set(key, timestamps);
+
+    // Periodically purge stale keys to eliminate memory leaks
+    if (this.requests.size > 200) {
+      for (const [k, times] of this.requests.entries()) {
+        const valid = times.filter(t => now - t < windowMs);
+        if (valid.length === 0) {
+          this.requests.delete(k);
+        } else {
+          this.requests.set(k, valid);
+        }
+      }
+    }
+
     return { allowed: true, remaining: maxRequests - timestamps.length };
+  }
+
+  reset(): void {
+    this.requests.clear();
   }
 }
 

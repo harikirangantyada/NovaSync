@@ -10,7 +10,7 @@
  * 7. Google Services Usage
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Award, 
   Play, 
@@ -59,10 +59,11 @@ export const AssessmentSuiteView: React.FC = () => {
     }
   };
 
-  const filteredTests = testResults.filter(t => {
-    if (activeCategoryFilter === 'all') return true;
-    return t.category.toLowerCase().includes(activeCategoryFilter.toLowerCase());
-  });
+  const filteredTests = useMemo(() => {
+    if (activeCategoryFilter === 'all') return testResults;
+    const filterLower = activeCategoryFilter.toLowerCase();
+    return testResults.filter(t => t.category.toLowerCase().includes(filterLower));
+  }, [testResults, activeCategoryFilter]);
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">

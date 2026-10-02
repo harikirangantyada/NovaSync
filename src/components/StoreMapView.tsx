@@ -3,7 +3,7 @@
  * 2D SVG floorplan with real-time waypoint routing, turn-by-turn checklist, and aisle stock lookup.
  */
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { 
   MapPin, 
   Navigation, 
@@ -32,15 +32,21 @@ export const StoreMapView: React.FC<StoreMapViewProps> = ({
   const [selectedAisle, setSelectedAisle] = useState<StoreAisle | null>(STORE_AISLES[0]);
   const [activeTab, setActiveTab] = useState<'map' | 'turns'>('map');
 
-  // Compute optimal shortest path visiting all products in cart
-  const routeCalculation = computeOptimalShoppingRoute(
-    { x: STORE_ENTRANCE.x, y: STORE_ENTRANCE.y },
-    cartProducts
-  );
+  // Compute optimal shortest path visiting all products in cart (memoized)
+  const routeCalculation = useMemo(() => {
+    return computeOptimalShoppingRoute(
+      { x: STORE_ENTRANCE.x, y: STORE_ENTRANCE.y },
+      cartProducts
+    );
+  }, [cartProducts]);
 
-  const aisleProducts = selectedAisle 
-    ? INITIAL_PRODUCTS.filter(p => p.aisle.toLowerCase().includes(String(selectedAisle.number)) || p.category === selectedAisle.category)
-    : [];
+  const aisleProducts = useMemo(() => {
+    if (!selectedAisle) return [];
+    const aisleNumStr = String(selectedAisle.number);
+    return INITIAL_PRODUCTS.filter(p => 
+      p.aisle.toLowerCase().includes(aisleNumStr) || p.category === selectedAisle.category
+    );
+  }, [selectedAisle]);
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
