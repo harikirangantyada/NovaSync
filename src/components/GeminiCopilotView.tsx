@@ -266,7 +266,7 @@ export const GeminiCopilotView: React.FC<GeminiCopilotViewProps> = ({
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between text-xs pt-2 border-t border-slate-850">
+                  <div className="flex items-center justify-between text-xs pt-2 border-t border-slate-800">
                     <span className="font-mono font-bold text-cyan-300">${prod.price.toFixed(2)}</span>
                     <span className="text-[10px] text-slate-400 font-mono">{prod.weightGrams}g</span>
                   </div>

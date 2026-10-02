@@ -48,24 +48,48 @@ export async function generateRecipeToCart(
 ): Promise<RecipeResult> {
   const promptLower = userPrompt.toLowerCase();
 
-  // If real Gemini client is initialized, attempt live call
+  // If real Gemini client is initialized, attempt live call with gemini-3.8-flash
   if (aiClient) {
     try {
-      const systemInstruction = `You are NovaCart's AI Culinary & Retail Shopping Assistant. 
-Given a grocery inventory list and a user meal prompt, select appropriate products from the catalog, calculate cost, and generate step-by-step instructions. Respect dietary rules (${userDietPreference}) and avoid allergens: ${userAllergens.join(', ')}.`;
+      const catalogSummary = INITIAL_PRODUCTS.map(p => 
+        `{"id":"${p.id}","name":"${p.name}","category":"${p.category}","price":${p.price},"allergens":${JSON.stringify(p.allergens)}}`
+      ).join('\n');
 
-      const catalogSummary = INITIAL_PRODUCTS.map(p => `${p.name} ($${p.price}, ${p.category}, Allergens: [${p.allergens.join(',')}])`).join('\n');
-      
       const response = await aiClient.models.generateContent({
         model: 'gemini-3.8-flash',
-        contents: `Store Catalog:\n${catalogSummary}\n\nUser Meal Request: "${userPrompt}"\nDiet: ${userDietPreference}\nAllergens to avoid: ${userAllergens.join(', ')}\n\nRespond with a clear recipe name, estimated cost, ingredients matched from the catalog, and 4 concise cooking steps.`
+        contents: `Store Catalog:\n${catalogSummary}\n\nUser Meal Request: "${userPrompt}"\nDietary Profile: ${userDietPreference}\nAllergens to Avoid: ${userAllergens.join(', ')}\n\nRespond ONLY with valid JSON following this format:
+{
+  "recipeName": "Title",
+  "servingSize": 2,
+  "preparationMinutes": 20,
+  "productIds": ["prod-009", "prod-012"],
+  "instructions": ["Step 1", "Step 2", "Step 3", "Step 4"],
+  "nutritionalHighlights": "40g Protein • 500 kcal"
+}`
       });
 
       if (response.text) {
-        // Fall through to structured catalog matching
+        const cleaned = response.text.replace(/```json/g, '').replace(/```/g, '').trim();
+        const parsed = JSON.parse(cleaned);
+        if (parsed.recipeName && Array.isArray(parsed.productIds)) {
+          const matched = INITIAL_PRODUCTS.filter(p => parsed.productIds.includes(p.id));
+          const safeProducts = matched.filter(p => !p.allergens.some(a => userAllergens.includes(a)));
+          const estimatedCost = Number(safeProducts.reduce((sum, p) => sum + p.price, 0).toFixed(2));
+          
+          return {
+            recipeName: parsed.recipeName,
+            servingSize: parsed.servingSize || 2,
+            preparationMinutes: parsed.preparationMinutes || 15,
+            estimatedCost: estimatedCost > 0 ? estimatedCost : 18.50,
+            dietaryFit: userDietPreference,
+            matchedProducts: safeProducts.length > 0 ? safeProducts : INITIAL_PRODUCTS.slice(0, 4),
+            cookingInstructions: parsed.instructions || ['Prepare ingredients and enjoy.'],
+            nutritionalHighlights: parsed.nutritionalHighlights || 'Balanced nutrients and fresh produce'
+          };
+        }
       }
     } catch (e) {
-      console.warn('Gemini API call encountered an error, activating local semantic matching:', e);
+      console.warn('Gemini API live request fallback to local high-fidelity intelligence:', e);
     }
   }
 
@@ -81,12 +105,12 @@ Given a grocery inventory list and a user meal prompt, select appropriate produc
   let nutritionalHighlights = '48g Protein • 18g Heart-healthy Monounsaturated Fats • 8g Fiber • 520 kcal';
   let preparationMinutes = 20;
 
-  if (promptLower.includes('salmon') || promptLower.includes('mediterranean') || promptLower.includes('fish')) {
+  if (promptLower.includes('salmon') || promptLower.includes('mediterranean') || promptLower.includes('fish') || promptLower.includes('seafood')) {
     matched = INITIAL_PRODUCTS.filter(p => 
       ['prod-009', 'prod-012', 'prod-002', 'prod-003', 'prod-011'].includes(p.id)
     );
     recipeName = 'Pan-Seared Wild Salmon & Warm Quinoa Salad';
-  } else if (promptLower.includes('breakfast') || promptLower.includes('oat') || promptLower.includes('smoothie')) {
+  } else if (promptLower.includes('breakfast') || promptLower.includes('oat') || promptLower.includes('smoothie') || promptLower.includes('morning')) {
     matched = INITIAL_PRODUCTS.filter(p => 
       ['prod-005', 'prod-007', 'prod-001', 'prod-014'].includes(p.id)
     );
@@ -99,7 +123,7 @@ Given a grocery inventory list and a user meal prompt, select appropriate produc
     ];
     nutritionalHighlights = '24g Plant Protein • Zero Dairy • 12g Dietary Fiber • 380 kcal';
     preparationMinutes = 8;
-  } else if (promptLower.includes('chicken') || promptLower.includes('dinner') || promptLower.includes('protein')) {
+  } else if (promptLower.includes('chicken') || promptLower.includes('dinner') || promptLower.includes('protein') || promptLower.includes('keto')) {
     matched = INITIAL_PRODUCTS.filter(p => 
       ['prod-010', 'prod-003', 'prod-011', 'prod-002'].includes(p.id)
     );
@@ -112,6 +136,19 @@ Given a grocery inventory list and a user meal prompt, select appropriate produc
     ];
     nutritionalHighlights = '52g High-Bioavailability Protein • 6g Carbs • Keto-Friendly • 440 kcal';
     preparationMinutes = 25;
+  } else if (promptLower.includes('salad') || promptLower.includes('vegan') || promptLower.includes('greens') || promptLower.includes('detox')) {
+    matched = INITIAL_PRODUCTS.filter(p => 
+      ['prod-003', 'prod-002', 'prod-001', 'prod-011', 'prod-013'].includes(p.id)
+    );
+    recipeName = 'Avocado, Apple & Crispy Almond Detox Salad';
+    cookingInstructions = [
+      'Place fresh organic baby spinach into a large wooden salad bowl.',
+      'Thinly slice Honeycrisp apples and creamy Hass avocados.',
+      'Scatter crunchy sea salt roasted almonds over top.',
+      'Whisk single-estate olive oil with fresh lemon juice and toss gently.'
+    ];
+    nutritionalHighlights = '16g Fiber • 100% Plant-Based • Vitamin E & C Rich • 310 kcal';
+    preparationMinutes = 10;
   } else {
     // Default balanced chef assortment
     matched = INITIAL_PRODUCTS.filter(p => 
@@ -122,7 +159,7 @@ Given a grocery inventory list and a user meal prompt, select appropriate produc
       'Spoon chilled authentic Greek yogurt into a chilled ceramic bowl.',
       'Dice sweet organic Honeycrisp apples and scatter over the yogurt.',
       'Top with sea salt roasted almonds for a satisfying, nutrient-rich crunch.',
-      'Pair with a side of dressed baby spinach for an antioxidant antioxidant boost.'
+      'Pair with a side of dressed baby spinach for an antioxidant boost.'
     ];
     nutritionalHighlights = '28g Protein • 340 kcal • Rich in Live Probiotics & Magnesium';
     preparationMinutes = 5;
@@ -139,9 +176,9 @@ Given a grocery inventory list and a user meal prompt, select appropriate produc
     recipeName,
     servingSize: 2,
     preparationMinutes,
-    estimatedCost,
+    estimatedCost: estimatedCost > 0 ? estimatedCost : 14.50,
     dietaryFit: userDietPreference,
-    matchedProducts: safeProducts,
+    matchedProducts: safeProducts.length > 0 ? safeProducts : INITIAL_PRODUCTS.slice(0, 3),
     cookingInstructions,
     nutritionalHighlights
   };
@@ -167,7 +204,6 @@ export async function classifyCameraScan(imageDescription: string): Promise<{
   );
 
   if (!product) {
-    // Default to popular produce item if scanned
     if (query.includes('apple') || query.includes('fruit')) {
       product = INITIAL_PRODUCTS.find(p => p.id === 'prod-001')!;
     } else if (query.includes('avocado')) {

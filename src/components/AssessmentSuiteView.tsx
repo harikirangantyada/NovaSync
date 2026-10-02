@@ -26,7 +26,8 @@ import {
   Cpu,
   Clock,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Download
 } from 'lucide-react';
 import { AssessmentRubricScore, TestResultItem } from '../types';
 import { runAllAutomatedTests } from '../services/automatedTestEngine';
@@ -89,23 +90,35 @@ export const AssessmentSuiteView: React.FC = () => {
             </div>
           </div>
 
-          <button
-            onClick={executeTests}
-            disabled={isRunningTests}
-            className="w-full md:w-auto px-6 py-3.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-black text-sm shadow-xl shadow-amber-500/30 flex items-center justify-center gap-2 transition-all focus:ring-2 focus:ring-amber-300"
-          >
-            {isRunningTests ? (
-              <>
-                <span className="w-4 h-4 border-2 border-slate-950 border-t-transparent rounded-full animate-spin" />
-                <span>Running 20+ Tests...</span>
-              </>
-            ) : (
-              <>
-                <Play className="w-4 h-4 fill-current" />
-                <span>Re-Run Automated Test Suite</span>
-              </>
-            )}
-          </button>
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full md:w-auto">
+            <a
+              href="/novacart-solution.zip"
+              download="novacart-solution.zip"
+              className="px-5 py-3.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-100 font-bold text-sm border border-slate-700 flex items-center justify-center gap-2 transition-all shadow-md focus:ring-2 focus:ring-cyan-400"
+              title="Download source code ZIP archive"
+            >
+              <Download className="w-4 h-4 text-cyan-400" />
+              <span>Download Project ZIP</span>
+            </a>
+
+            <button
+              onClick={executeTests}
+              disabled={isRunningTests}
+              className="px-6 py-3.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-black text-sm shadow-xl shadow-amber-500/30 flex items-center justify-center gap-2 transition-all focus:ring-2 focus:ring-amber-300"
+            >
+              {isRunningTests ? (
+                <>
+                  <span className="w-4 h-4 border-2 border-slate-950 border-t-transparent rounded-full animate-spin" />
+                  <span>Running 20+ Tests...</span>
+                </>
+              ) : (
+                <>
+                  <Play className="w-4 h-4 fill-current" />
+                  <span>Re-Run Automated Test Suite</span>
+                </>
+              )}
+            </button>
+          </div>
         </div>
 
         {/* 7 Rubric Criteria Grid */}

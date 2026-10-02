@@ -15,7 +15,8 @@ import {
   Eye, 
   HelpCircle,
   Lock,
-  UserCheck
+  UserCheck,
+  Download
 } from 'lucide-react';
 import { UserRole } from '../types';
 
@@ -215,6 +216,17 @@ export const Header: React.FC<HeaderProps> = ({
             >
               <HelpCircle className="w-4 h-4" />
             </button>
+
+            {/* Download Source Code ZIP */}
+            <a
+              href="/novacart-solution.zip"
+              download="novacart-solution.zip"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold shadow-md shadow-cyan-600/20 transition-all focus:outline-none focus:ring-2 focus:ring-cyan-400"
+              title="Download Complete Project ZIP Archive"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span className="hidden lg:inline">Download ZIP</span>
+            </a>
 
           </div>
         </div>
